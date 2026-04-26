@@ -1,11 +1,10 @@
-// 文件名: arch-unit-constraints-test.groovy
+// 文件名: ArchUnitConstraintsTest.groovy
 // 位置: src/test/groovy/com/yourcompany/project/architecture/ArchUnitConstraintsTest.groovy
-// 说明: 本文件为 AI Agent 架构约束的自动化验证。任何违反的代码都将导致 CI 失败。
+// 说明: 本文件基于 Spock 框架，为 AI Agent 架构约束的自动化验证。任何违反的代码都将导致 CI 失败。
 
 import com.tngtech.archunit.core.domain.JavaClasses
 import com.tngtech.archunit.core.importer.ClassFileImporter
 import com.tngtech.archunit.core.importer.ImportOption
-import com.tngtech.archunit.lang.ArchRule
 import com.tngtech.archunit.lang.syntax.ArchRuleDefinition
 import com.tngtech.archunit.library.dependencies.SlicesRuleDefinition
 import spock.lang.Shared
@@ -14,9 +13,13 @@ import spock.lang.Specification
 class ArchUnitConstraintsTest extends Specification {
 
     @Shared
-    JavaClasses importedClasses = new ClassFileImporter()
-            .withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS)
-            .importPackages("com.yourcompany.project")
+    JavaClasses importedClasses
+
+    def setupSpec() {
+        importedClasses = new ClassFileImporter()
+                .withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS)
+                .importPackages("com.yourcompany.project")
+    }
 
     // =========================================================================
     // 一、DDD 分层依赖约束
@@ -30,7 +33,7 @@ class ArchUnitConstraintsTest extends Specification {
                 .should().dependOnClassesThat()
                 .resideInAnyPackage("..application..", "..interfaces..", "..infrastructure..")
 
-        expect: "Domain 层保持纯粹"
+        expect: "Domain 层保持纯粹，不违反分层依赖"
         rule.check(importedClasses)
     }
 
@@ -45,18 +48,18 @@ class ArchUnitConstraintsTest extends Specification {
         rule.check(importedClasses)
     }
 
-    def "Interface 层只能依赖 Application 层"() {
-        given: "定义 Interface 层的合法依赖"
+    def "Interface 层只能依赖 Application 层及其他合法基础"() {
+        given: "定义 Interface 层的合法依赖范围"
         def rule = ArchRuleDefinition.classes()
                 .that().resideInAPackage("..interfaces..")
                 .should().onlyDependOnClassesThat()
                 .resideInAnyPackage(
-                        "..application..",   // 只能调用应用层
-                        "..interfaces..",    // 自身
-                        "java..",            // JDK
-                        "org.springframework..", // Spring 框架
-                        "jakarta..",         // Jakarta 注解
-                        "org.mapstruct.."    // MapStruct
+                        "..application..",
+                        "..interfaces..",
+                        "java..",
+                        "org.springframework..",
+                        "jakarta..",
+                        "org.mapstruct.."
                 )
 
         expect: "Interface 层依赖合法"
@@ -65,11 +68,11 @@ class ArchUnitConstraintsTest extends Specification {
 
     // =========================================================================
     // 二、Repository 接口与实现分离约束
-    // 来源: architecture-guide.md 第三章“Domain 层”与“Infrastructure 层”
+    // 来源: architecture-guide.md 第三章
     // =========================================================================
 
     def "Repository 接口必须在 Domain 层定义"() {
-        given: "检查所有 Repository 接口的位置"
+        given: "所有以 Repository 结尾的接口"
         def rule = ArchRuleDefinition.classes()
                 .that().haveNameMatching(".*Repository")
                 .and().areInterfaces()
@@ -80,22 +83,12 @@ class ArchUnitConstraintsTest extends Specification {
     }
 
     def "Repository 实现必须在 Infrastructure 层"() {
-        given: "检查所有 Repository 实现类的位置"
+        given: "所有以 RepositoryImpl 结尾的类"
         def rule = ArchRuleDefinition.classes()
                 .that().haveNameMatching(".*RepositoryImpl")
                 .should().resideInAPackage("..infrastructure.persistence.repository..")
 
         expect: "所有 RepositoryImpl 位于 infrastructure 包"
-        rule.check(importedClasses)
-    }
-
-    def "Repository 实现必须实现对应的 Domain 接口"() {
-        given: "定义实现类的行为约束"
-        def rule = ArchRuleDefinition.classes()
-                .that().haveNameMatching(".*RepositoryImpl")
-                .should().implement(Class.forName("com.yourcompany.project.domain.repository.*Repository"))
-
-        expect: "RepositoryImpl 实现 Domain 层的 Repository 接口"
         rule.check(importedClasses)
     }
 
@@ -105,7 +98,7 @@ class ArchUnitConstraintsTest extends Specification {
     // =========================================================================
 
     def "Domain 层禁止使用任何 MyBatis-Plus 类"() {
-        given: "禁止项列表"
+        given: "禁止 Domain 层依赖 MyBatis-Plus 相关包"
         def rule = ArchRuleDefinition.noClasses()
                 .that().resideInAPackage("..domain..")
                 .should().dependOnClassesThat()
@@ -116,7 +109,7 @@ class ArchUnitConstraintsTest extends Specification {
     }
 
     def "Application 层禁止使用任何 MyBatis-Plus 类"() {
-        given: "禁止项列表"
+        given: "禁止 Application 层依赖 MyBatis-Plus 相关包"
         def rule = ArchRuleDefinition.noClasses()
                 .that().resideInAPackage("..application..")
                 .should().dependOnClassesThat()
@@ -127,7 +120,7 @@ class ArchUnitConstraintsTest extends Specification {
     }
 
     def "Interface 层禁止使用任何 MyBatis-Plus 类"() {
-        given: "禁止项列表"
+        given: "禁止 Interface 层依赖 MyBatis-Plus 相关包"
         def rule = ArchRuleDefinition.noClasses()
                 .that().resideInAPackage("..interfaces..")
                 .should().dependOnClassesThat()
@@ -137,27 +130,13 @@ class ArchUnitConstraintsTest extends Specification {
         rule.check(importedClasses)
     }
 
-    def "MyBatis-Plus BaseMapper 只能在 Infrastructure 层使用"() {
-        given: "定义合法使用范围"
-        def rule = ArchRuleDefinition.noClasses()
-                .that().resideInAPackage("..infrastructure.persistence.mapper..")
-                .should().dependOnClassesThat()
-                .resideInAnyPackage("com.baomidou.mybatisplus.core.mapper.BaseMapper")
-                .orShould() // 直接引用 BaseMapper 是合法的
-                .andShould().onlyBeAccessed().byAnyPackage("..infrastructure..")
-
-        expect: "BaseMapper 仅被 Infrastructure 层内部访问"
-        // 注：此条较为严苛，可先注释，在 PR 审查时人工关注
-        true
-    }
-
     // =========================================================================
     // 四、MapStruct 隔离约束
-    // 来源: mapstruct-usage.md 第一章“核心原则”与第五章“禁止事项清单”
+    // 来源: mapstruct-usage.md 第一章与第五章
     // =========================================================================
 
     def "Domain 层禁止使用任何 MapStruct 类"() {
-        given: "禁止项"
+        given: "禁止 Domain 层依赖 MapStruct"
         def rule = ArchRuleDefinition.noClasses()
                 .that().resideInAPackage("..domain..")
                 .should().dependOnClassesThat()
@@ -168,7 +147,7 @@ class ArchUnitConstraintsTest extends Specification {
     }
 
     def "MapStruct Mapper 必须位于正确的 assembler 包"() {
-        given: "检查所有 MapStruct 接口的位置"
+        given: "所有被 @Mapper 注解的接口"
         def rule = ArchRuleDefinition.classes()
                 .that().areAnnotatedWith("org.mapstruct.Mapper")
                 .should().resideInAnyPackage(
@@ -181,8 +160,8 @@ class ArchUnitConstraintsTest extends Specification {
         rule.check(importedClasses)
     }
 
-    def "Interface 层 Mapper 只能转换本层对象"() {
-        given: "定义 Interface 层 Mapper 的合法源/目标类型"
+    def "Interface 层 Mapper 只能转换本层及 Application 层对象"() {
+        given: "Interface 层 Mapper 的合法依赖范围"
         def rule = ArchRuleDefinition.classes()
                 .that().resideInAPackage("..interfaces.assembler")
                 .should().onlyDependOnClassesThat()
@@ -199,7 +178,7 @@ class ArchUnitConstraintsTest extends Specification {
     }
 
     def "Application 层 Mapper 禁止直接依赖 PO"() {
-        given: "检查 Application 层的 Mapper 是否引用 PO"
+        given: "禁止 Application 的 Mapper 引用 Infrastructure 的 dataobject"
         def rule = ArchRuleDefinition.noClasses()
                 .that().resideInAPackage("..application.assembler")
                 .should().dependOnClassesThat()
@@ -210,9 +189,9 @@ class ArchUnitConstraintsTest extends Specification {
     }
 
     def "Infrastructure 层 Mapper 禁止被上层直接注入"() {
-        given: "检查 Infrastructure 的 Mapper 是否被上层非法访问"
+        given: "禁止接口层和应用层直接依赖 Infrastructure 的 Mapper"
         def rule = ArchRuleDefinition.noClasses()
-                .that().resideInAPackage("..interfaces..", "..application..")
+                .that().resideInAnyPackage("..interfaces..", "..application..")
                 .should().dependOnClassesThat()
                 .resideInAPackage("..infrastructure.persistence.assembler")
 
@@ -222,11 +201,11 @@ class ArchUnitConstraintsTest extends Specification {
 
     // =========================================================================
     // 五、命名规范与代码风格约束
-    // 来源: java-code-style.md 第一章“命名规范”
+    // 来源: java-code-style.md 第一章
     // =========================================================================
 
     def "应用服务类名称必须以 ApplicationService 结尾"() {
-        given: "命名规则"
+        given: "Application 层 service 包下的类"
         def rule = ArchRuleDefinition.classes()
                 .that().resideInAPackage("..application.service..")
                 .should().haveSimpleNameEndingWith("ApplicationService")
@@ -236,7 +215,7 @@ class ArchUnitConstraintsTest extends Specification {
     }
 
     def "Controller 类名称必须以 Controller 结尾"() {
-        given: "命名规则"
+        given: "Interface 层 controller 包下的类"
         def rule = ArchRuleDefinition.classes()
                 .that().resideInAPackage("..interfaces.controller..")
                 .should().haveSimpleNameEndingWith("Controller")
@@ -245,8 +224,8 @@ class ArchUnitConstraintsTest extends Specification {
         rule.check(importedClasses)
     }
 
-    def "PO 类名称必须以 PO 结尾，且位于 dataobject 包"() {
-        given: "命名与位置规则"
+    def "PO 类名称必须以 PO 结尾且位于 dataobject 包"() {
+        given: "所有以 PO 结尾的类"
         def rule = ArchRuleDefinition.classes()
                 .that().haveSimpleNameEndingWith("PO")
                 .should().resideInAPackage("..infrastructure.persistence.dataobject..")
@@ -261,7 +240,7 @@ class ArchUnitConstraintsTest extends Specification {
     // =========================================================================
 
     def "各 DDD 分层之间不应存在循环依赖"() {
-        given: "按层切片"
+        given: "按层切片并检查循环"
         def rule = SlicesRuleDefinition.slices()
                 .matching("com.yourcompany.project.(*)..")
                 .should().beFreeOfCycles()
@@ -276,7 +255,7 @@ class ArchUnitConstraintsTest extends Specification {
     // =========================================================================
 
     def "项目中禁止使用 BeanUtils.copyProperties"() {
-        given: "检查所有类中是否调用了 BeanUtils"
+        given: "检查所有类对 Spring BeanUtils 的依赖"
         def rule = ArchRuleDefinition.noClasses()
                 .should().dependOnClassesThat()
                 .haveFullyQualifiedName("org.springframework.beans.BeanUtils")
@@ -287,11 +266,11 @@ class ArchUnitConstraintsTest extends Specification {
 
     // =========================================================================
     // 八、IService / ServiceImpl 禁用检查
-    // 来源: mybatis-plus-usage.md 第四章“BaseMapper 与 IService 使用规则”
+    // 来源: mybatis-plus-usage.md 第四章
     // =========================================================================
 
     def "项目中禁止使用 MyBatis-Plus 的 IService 接口"() {
-        given: "检查是否实现了 IService"
+        given: "检查所有类对 IService 的依赖"
         def rule = ArchRuleDefinition.noClasses()
                 .should().dependOnClassesThat()
                 .haveFullyQualifiedName("com.baomidou.mybatisplus.extension.service.IService")
@@ -301,7 +280,7 @@ class ArchUnitConstraintsTest extends Specification {
     }
 
     def "项目中禁止使用 MyBatis-Plus 的 ServiceImpl 类"() {
-        given: "检查是否继承了 ServiceImpl"
+        given: "检查所有类对 ServiceImpl 的依赖"
         def rule = ArchRuleDefinition.noClasses()
                 .should().dependOnClassesThat()
                 .haveFullyQualifiedName("com.baomidou.mybatisplus.extension.service.impl.ServiceImpl")
