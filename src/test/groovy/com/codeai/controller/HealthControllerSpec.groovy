@@ -7,8 +7,7 @@ import org.springframework.boot.test.web.client.TestRestTemplate
 import org.springframework.http.ResponseEntity
 import spock.lang.Specification
 
-@SpringBootTest(classes = CodeAiApplication.class, webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-class HealthControllerSpec extends Specification {
+class HealthControllerSpec extends BaseAppSpec {
 
     @Autowired
     TestRestTemplate restTemplate
